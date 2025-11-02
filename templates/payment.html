@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ชำระเงินสำหรับห้อง {{ room.name }}</title>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #343a40;
+        }
+        #countdown { 
+            font-size: 2.5em; 
+            font-weight: bold; 
+            color: #17a2b8; 
+            margin: 20px 0; 
+        }
+        #countdown.warning { 
+            color: #fd7e14; /* สีส้ม */
+            animation: pulse 1s infinite;
+        }
+        .qr-code-image {
+            width: 250px;
+            height: auto;
+            display: block;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            padding: 5px;
+        }
+        #message { 
+            margin-top: 15px; 
+            font-weight: bold; 
+        }
+        input[type="file"] {
+            margin: 15px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .promo-section { margin: 20px 0; display: flex; gap: 10px; justify-content: center; }
+        #promo-code { padding: 8px; border: 1px solid #ccc; border-radius: 5px; flex-grow: 1; }
+        #apply-promo { padding: 8px 15px; border: none; background-color: #28a745; color: white; cursor: pointer; }
+        .price-details del { color: #6c757d; }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ห้อง {{ room.name }}</h1>
+        
+        <!-- ส่วนนับถอยหลัง (จะแสดงเมื่อห้องเริ่มใช้งานแล้ว) -->
+        <div id="countdown-container" style="display: none;">
+            <h3>เวลาที่เหลือ:</h3>
+            <div id="countdown">00:00:00</div>
+        </div>
+        
+        <!-- ส่วนชำระเงิน -->
+        <div id="payment-section">
+             <div class="price-details">
+                <h2>
+                    {% if room.status == 'occupied' %}
+                        ต่อเวลา: {{ "30 นาที" if hours == 0.5 else "1 ชั่วโมง (ส่วนลด)" if hours == 1.0 else hours ~ " ชั่วโมง" }}
+                    {% else %}
+                        {{ hours }} ชั่วโมง
+                    {% endif %}
+                </h2>
+
+                {% if discount_amount > 0 %}
+                    <p>ราคาปกติ: <del>{{ original_price }}</del> บาท</p>
+                    <p style="color: green;">ส่วนลด ({{ promo_code }}): {{ discount_amount }} บาท</p>
+                    <h3>ยอดชำระ: {{ price }} บาท</h3>
+                {% else %}
+                    <h3>ราคา: {{ price }} บาท</h3>
+                {% endif %}
+            </div>
+
+            <!-- ช่องกรอกโค้ดส่วนลด -->
+           {% if room.status == 'available' %}
+        <div class="promo-section">
+            <input type="text" id="promo-code" placeholder="ใส่โค้ดส่วนลด" value="{{ promo_code or '' }}">
+            <button id="apply-promo">ใช้โค้ด</button>
+        </div>
+        {% endif %}
+
+            <p>1. สแกน QR Code นี้เพื่อชำระเงิน</p>
+            <img src="{{ url_for('static', filename='bank_qr.png') }}" alt="QR Code ธนาคาร" class="qr-code-image">
+
+            <p>2. อัปโหลดสลิปการโอนเงินเพื่อยืนยัน</p>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <input type="file" name="slip" id="slipFile" accept="image/*" required><br>
+                <button type="submit">ยืนยันการชำระเงิน</button>
+            </form>
+        </div>
+
+        <div id="message"></div>
+        <audio id="warning-sound" src="{{ url_for('static', filename='warning.mp3') }}" preload="auto"></audio>
+    </div>
+ 
+    <script>
+        $(document).ready(function() {
+            const roomId = '{{ room_id }}';
+            let countdownInterval;
+            let warningPlayed = false;
+
+            // --- ฟังก์ชันสำหรับปุ่ม "ใช้โค้ด" ---
+            $('#apply-promo').on('click', function() {
+                const promoCode = $('#promo-code').val().trim();
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('promo', promoCode);
+                window.location.href = currentUrl.toString();
+            });
+
+            // --- ฟังก์ชันสำหรับจัดการการแสดงผลเวลา ---
+            function formatTime(seconds) {
+                const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+                const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+                const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+                return `${h}:${m}:${s}`;
+            }
+
+            function updateCountdown() {
+                $.ajax({
+                    url: `/status/${roomId}`,
+                    type: 'GET',
+                    success: function(data) {
+                        if (data.status === 'occupied' && data.remaining_seconds > 0) {
+                            const remaining = data.remaining_seconds;
+                            $('#countdown-container').show();
+                            $('#countdown').text(formatTime(remaining));
+
+                            if (remaining <= 300 && !warningPlayed) {
+                                $('#warning-sound')[0].play().catch(e => console.error("Audio play failed:", e));
+                                warningPlayed = true;
+                                $('#countdown').addClass('warning');
+                            }
+                        } else {
+                            $('#countdown-container').hide();
+                            if (countdownInterval) {
+                                clearInterval(countdownInterval);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // --- ฟังก์ชันสำหรับจัดการการอัปโหลดสลิป ---
+            $('#uploadForm').on('submit', function(e) {
+                e.preventDefault();
+                var formData = new FormData(this);
+                var uploadButton = $(this).find('button[type="submit"]');
+
+                $('#message').text('กำลังตรวจสอบสลิป กรุณารอสักครู่...').css('color', 'blue');
+                uploadButton.prop('disabled', true).text('กำลังตรวจสอบ...');
+
+                $.ajax({
+                    url: '{{ url_for("upload_slip", room_id=room_id, hours=hours) }}?promo={{ promo_code or "" }}',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            alert(response.message);
+                            window.location.href = "/";
+                        } else {
+                            $('#message').css('color', 'red').text('เกิดข้อผิดพลาด: ' + response.message);
+                            uploadButton.prop('disabled', false).text('ยืนยันการชำระเงิน');
+                        }
+                    },
+                    error: function() {
+                        $('#message').css('color', 'red').text('เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์');
+                        uploadButton.prop('disabled', false).text('ยืนยันการชำระเงิน');
+                    }
+                });
+            });
+
+            // --- ตรวจสอบสถานะห้องครั้งแรกเมื่อเปิดหน้า ---
+            $.ajax({
+                url: `/status/${roomId}`,
+                type: 'GET',
+                success: function(data) {
+                    if (data.status === 'occupied') {
+                        updateCountdown();
+                        countdownInterval = setInterval(updateCountdown, 1000);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

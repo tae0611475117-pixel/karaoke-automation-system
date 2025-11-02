@@ -1,0 +1,76 @@
+/* ตั้งค่าโดยรวมของทั้งหน้าเว็บ */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f7f6; /* สีพื้นหลังเทาอ่อนๆ */
+    color: #f309ccff; /* สีตัวอักษรหลัก */
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+}
+
+h1, h2 {
+    color: #f80bd1ff; /* สีหัวข้อหลักเป็นสีน้ำเงินเข้ม */
+}
+
+/* จัดเรียงกล่องห้องให้อยู่ตรงกลางและมีระยะห่าง */
+.room-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px; /* ระยะห่างระหว่างกล่อง */
+    margin-top: 30px;
+}
+
+/* สไตล์ของกล่องแต่ละห้อง */
+.room {
+    background-color: #ffffff; /* พื้นหลังสีขาว */
+    border: 1px solid #ddd;
+    border-radius: 12px; /* ทำให้ขอบมนขึ้น */
+    padding: 20px;
+    width: 280px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1); /* เพิ่มเงาให้ดูมีมิติ */
+    transition: transform 0.2s; /* เพิ่ม animation ตอนเอาเมาส์ชี้ */
+}
+
+.room:hover {
+    transform: translateY(-5px); /* ทำให้กล่องลอยขึ้นนิดนึงเมื่อเมาส์ชี้ */
+}
+
+.room h3 {
+    margin-top: 0;
+    color: #007bff; /* สีชื่อห้อง */
+}
+
+/* สไตล์ของห้องที่ไม่ว่าง */
+.occupied {
+    background-color: #ffebee; /* พื้นหลังสีชมพูอ่อน */
+    opacity: 0.7;
+}
+
+/* สไตล์ของปุ่ม */
+.room button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 8px;
+    border: none;
+    border-radius: 8px;
+    background-color: #1facb6ff; /* สีเขียว */
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.room button:hover {
+    background-color: #34b33aff; /* ทำให้สีเข้มขึ้นเมื่อเมาส์ชี้ */
+} /* ... โค้ด css เดิม ... */
+
+/* สไตล์สำหรับปุ่มต่อเวลาโดยเฉพาะ */
+.extend-button {
+    background-color: #f0ad4e; /* สีส้ม */
+}
+
+.extend-button:hover {
+    background-color: #ec971f; /* สีส้มเข้ม */
+}

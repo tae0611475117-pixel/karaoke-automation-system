@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>เลือกห้องคาราโอเกะ</title>
+    <style>body { font-family: sans-serif; text-align: center; } .room-container { display: flex; flex-wrap: wrap; justify-content: center; } .room { border: 1px solid #ccc; padding: 20px; margin: 10px; width: 250px; } .occupied { background-color: #ffdddd; } </style>
+</head>
+<body>
+    <h1>ยินดีต้อนรับสู่ร้านคาราโอเกะ</h1>
+    <h2>กรุณาเลือกห้องและเวลาที่ต้องการใช้บริการ</h2>
+    <div class="room-container">
+        {% for id, room in rooms.items() %}
+            <div class="room {% if room.status == 'occupied' %}occupied{% endif %}">
+                <h3>{{ room.name }}</h3>
+                {% if room.status == 'occupied' %}
+                    <p>ไม่ว่าง</p>
+                {% else %}
+                    <p>สถานะ: ว่าง</p>
+                    {% for hours, price in room.prices.items() %}
+                        <a href="{{ url_for('payment_page', room_id=id, hours=hours) }}">
+                            <button>{{ hours }} ชั่วโมง ({{ price }} บาท)</button>
+                        </a>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</body>
+</html>
