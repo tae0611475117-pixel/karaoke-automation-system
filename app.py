@@ -9,7 +9,7 @@ from device_control import send_ir_command, TV_POWER_CODES
 
 # --- การตั้งค่าพื้นฐาน ---
 app = Flask(__name__)
-app.config.from_object(Config)
+app.config.from_object('config')
 ROOM_DATA = app.config['ROOM_DATA']
 PROMPT_PAY_ID = app.config['PROMPT_PAY_ID']
 USED_TRANS_REFS = set()
