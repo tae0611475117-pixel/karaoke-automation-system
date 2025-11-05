@@ -9,7 +9,7 @@ from device_control import send_ir_command, TV_POWER_CODES
 
 # --- การตั้งค่าพื้นฐาน ---
 app = Flask(__name__)
-app.config.from_object('config')
+app.config.from_object(Config)
 ROOM_DATA = app.config['ROOM_DATA']
 PROMPT_PAY_ID = app.config['PROMPT_PAY_ID']
 USED_TRANS_REFS = set()
@@ -75,7 +75,7 @@ def turn_off_tv_session(room_id):
 def verify_slip_with_slipok(slip_path, expected_amount, expected_receiver_account):
     """ฟังก์ชันสำหรับตรวจสอบสลิปกับ SlipOK โดยเช็คยอดเงินและบัญชีผู้รับ"""
     api_key = ('SLIP_API_KEY')
-    api_url = " https://api.slipok.com/api/line/apikey/54845"
+    api_url = " https://api.slipok.com/api/line/apikey/54559"
 
     if not api_key:
         return {'status': 'error', 'message': 'ตั้งค่า API Key ไม่สมบูรณ์'}
@@ -85,7 +85,7 @@ def verify_slip_with_slipok(slip_path, expected_amount, expected_receiver_accoun
             files = {'files': slip_file}
             
             # --- แก้ไขจุดสำคัญ: เปลี่ยนรูปแบบ Header ตามที่ SlipOK แนะนำ ---
-            headers = {'x-authorization': 'SLIPOKEQ96KZM' }
+            headers = {'x-authorization': 'SLIPOK7I5XHWR' }
             
             response = requests.post(api_url, files=files, headers=headers, timeout=20)          
 
@@ -158,39 +158,48 @@ USED_TRANS_REFS = load_used_slips()
 def index():
     return render_template('index.html', rooms=ROOM_DATA)
 
-@app.route('/pay/<room_id>/<int:hours>')
-@app.route('/pay/<room_id>/<float:hours>')
+# -------------------------------------------------------------
+# --- จุดที่ 1: แก้ไข Route และฟังก์ชัน payment_page ---
+# -------------------------------------------------------------
+@app.route('/pay/<room_id>/<hours>') # <--- ลบ 'float:' ออก
 def payment_page(room_id, hours):
+    
+    try:
+        # --- เพิ่มเข้ามา: แปลง hours (string) เป็น float ---
+        hours_float = float(hours)
+    except ValueError:
+        return "Invalid duration format", 400 # กันคนพิมพ์ URL มั่ว
+        
     if room_id not in ROOM_DATA:
         return "Room not found", 404
+        
     room = ROOM_DATA[room_id]
-    original_price = room['prices'].get(float(hours))
+    # --- เปลี่ยน hours เป็น hours_float ---
+    original_price = room['prices'].get(hours_float) 
     
     if original_price is None:
         return "Invalid duration", 404
 
-    final_price = original_price
-    discount_amount = 0
-    promo_code = None
-
-    # ถ้าห้องว่าง (เป็นการจองใหม่) ถึงจะอนุญาตให้ใช้โค้ดส่วนลดได้
-    if room['status'] == 'available':
-        promo_code = request.args.get('promo', None)
-        discount_percent = PROMO_CODES.get(promo_code, 0)
-        discount_amount = round((original_price * discount_percent) / 100)
-        final_price = original_price - discount_amount
+    promo_code = request.args.get('promo', None)
+    discount_percent = PROMO_CODES.get(promo_code, 0)
+    
+    discount_amount = round((original_price * discount_percent) / 100)
+    final_price = original_price - discount_amount
 
     qr_img_path = "static/bank_qr.png"
 
     return render_template('payment.html', 
                            room=room, 
                            room_id=room_id, 
-                           hours=hours, 
+                           hours=hours_float, # --- ส่ง hours_float ไปหน้าเว็บ
                            price=final_price, 
                            original_price=original_price,
                            discount_amount=discount_amount,
                            promo_code=promo_code,
                            qr_image=qr_img_path)
+# -------------------------------------------------------------
+# --- จบจุดที่ 1 ---
+# -------------------------------------------------------------
 
 @app.route('/status/<room_id>')
 def room_status(room_id):
@@ -200,23 +209,32 @@ def room_status(room_id):
         return jsonify({'status': room['status'], 'remaining_seconds': remaining})
     return jsonify({'status': 'available', 'remaining_seconds': 0})
 
-@app.route('/upload_slip/<room_id>/<float:hours>', methods=['POST'])
+# -------------------------------------------------------------
+# --- จุดที่ 2: แก้ไข Route และฟังก์ชัน upload_slip ---
+# -------------------------------------------------------------
+@app.route('/upload_slip/<room_id>/<hours>', methods=['POST']) # <--- ลบ 'float:' ออก
 def upload_slip(room_id, hours):
     file = request.files.get('slip')
     if not file or file.filename == '':
         return jsonify({'status': 'error', 'message': 'กรุณาเลือกไฟล์สลิป'})
 
     try:
+        # --- เพิ่มเข้ามา: แปลง hours (string) เป็น float ---
+        try:
+            hours_float = float(hours)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'รูปแบบเวลาไม่ถูกต้อง'}), 400
+
         room = ROOM_DATA.get(room_id)
         
-        original_price = room['prices'].get(hours)
+        # --- เปลี่ยน hours เป็น hours_float ---
+        original_price = room['prices'].get(hours_float)
         if original_price is None:
             return jsonify({'status': 'error', 'message': 'แพ็กเกจราคาไม่ถูกต้อง'})
         
         promo_code = request.args.get('promo', None)
         discount_percent = PROMO_CODES.get(promo_code, 0)
         final_price = original_price - round((original_price * discount_percent) / 100)
-
 
         filename = secure_filename(f"{room_id}_{int(time.time())}_{file.filename}")
         slip_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -225,9 +243,12 @@ def upload_slip(room_id, hours):
         verification_result = verify_slip_with_slipok(slip_path, expected_amount=final_price, expected_receiver_account=PROMPT_PAY_ID)
         
         if verification_result.get('status') == 'approved':
-            duration_seconds = hours * 3600
+            # --- เปลี่ยน hours เป็น hours_float ---
+            duration_seconds = hours_float * 3600
+            
             if room['status'] == 'occupied' and room.get('end_time'):
-                print(f"Extending time for room {room_id} by {hours} hour(s).")
+                # --- เปลี่ยน hours เป็น hours_float ---
+                print(f"Extending time for room {room_id} by {hours_float} hour(s).")
                 if ACTIVE_TIMERS.get(room_id):
                     ACTIVE_TIMERS[room_id].cancel()
                 
@@ -236,12 +257,14 @@ def upload_slip(room_id, hours):
                 total_remaining_seconds = new_end_time - time.time()
                 message = f'ต่อเวลาสำเร็จ! ใช้งานห้อง {room["name"]} ต่อได้เลย'
             else:
-                print(f"Session started for {room_id} for {hours} hour(s).")
+                # --- เปลี่ยน hours เป็น hours_float ---
+                print(f"Session started for {room_id} for {hours_float} hour(s).")
                 control_tv_power(room_id)
                 room['status'] = 'occupied'
                 room['end_time'] = time.time() + duration_seconds
                 total_remaining_seconds = duration_seconds
                 message = f'ชำระเงินสำเร็จ! เริ่มใช้งานห้อง {room["name"]} ได้เลย'
+                
             new_timer = threading.Timer(total_remaining_seconds, turn_off_tv_session, args=[room_id])
             new_timer.start()
             ACTIVE_TIMERS[room_id] = new_timer
@@ -252,6 +275,10 @@ def upload_slip(room_id, hours):
     except Exception as e:
         print(f"An exception occurred during slip upload: {e}")
         return jsonify({'status': 'error', 'message': 'เกิดข้อผิดพลาดในการประมวลผลไฟล์'})
+# -------------------------------------------------------------
+# --- จบจุดที่ 2 ---
+# -------------------------------------------------------------
+
 # --- ส่วนสำหรับรันแอปพลิเคชัน ---
 if __name__ == '__main__':
     if not os.path.exists('static'):
